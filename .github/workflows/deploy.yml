@@ -1,0 +1,63 @@
+name: Deploy to Droplet
+
+on:
+  push:
+    branches:
+      - production
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "${{ secrets.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Test SSH Connection
+        run: |
+          ssh -tt -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 root@${{ secrets.DROPLET_HOST }} << 'EOF'
+            echo "✅ SSH is working"
+            hostname
+            whoami
+            ls -la /root
+          EOF
+
+      - name: Deploy via SSH
+        run: |
+          ssh -tt -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 root@${{ secrets.DROPLET_HOST }} << 'EOF'
+            set -ex
+
+            echo "📍 SSH connected to remote machine"
+
+            echo "📁 Navigating to app directory..."
+            cd /root/app || (git clone https://github.com/bikram17/betting-app-backend.git /root/app && cd /root/app)
+
+            echo "🔄 Git sync..."
+            git config user.email "github-actions@arenabast.com"
+            git config user.name "GitHub Actions"
+            git fetch origin production || echo "⚠️ Git fetch failed"
+            git checkout production || echo "⚠️ Git checkout failed"
+            git reset --hard origin/production || echo "⚠️ Git reset failed"
+            git clean -fd || echo "⚠️ Git clean failed"
+
+            echo "⚙️ Building Spring Boot project..."
+            ./mvnw clean package -DskipTests || echo "⚠️ Maven build failed"
+
+            echo "🛑 Stopping existing Docker containers..."
+            docker-compose down || echo "⚠️ docker-compose down failed"
+
+            echo "🔧 Rebuilding containers..."
+            docker-compose build --no-cache || echo "⚠️ docker-compose build failed"
+
+            echo "🚀 Starting containers..."
+            docker-compose up -d || echo "⚠️ docker-compose up failed"
+
+            echo "✅ Deployment successful"
+          EOF

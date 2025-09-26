@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  mysql-db:
+    image: mysql:8
+    container_name: mysql-db
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: Services@2022
+      MYSQL_DATABASE: arena_bast
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - arena-net
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: arena-backend
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mysql-db
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-db:3306/arena_bast?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: Services@2022
+    networks:
+      - arena-net
+
+volumes:
+  db_data:
+
+networks:
+  arena-net:
+    driver: bridge
